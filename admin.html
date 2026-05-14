@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>打卡系統後台</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+* { box-sizing: border-box; }
+body { font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+       margin: 0; background: #f0f2f5; color: #1a1a1a; }
+.header { background: #1f2937; color: white; padding: 16px 24px; display: flex;
+          justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+.header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+.user-info { font-size: 14px; opacity: 0.9; }
+
+.container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+.login-box { max-width: 400px; margin: 80px auto; background: white; padding: 32px;
+             border-radius: 12px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+.login-box h2 { margin-top: 0; }
+#g_id_signin { display: flex; justify-content: center; margin-top: 20px; }
+.g_id_signin { display: flex; justify-content: center; margin-top: 20px; }
+
+.tabs { display: flex; gap: 4px; border-bottom: 2px solid #e5e7eb; margin-bottom: 20px;
+        overflow-x: auto; }
+.tab { padding: 10px 18px; cursor: pointer; border: none; background: none;
+       font-size: 15px; font-weight: 500; color: #6b7280; white-space: nowrap;
+       font-family: inherit; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+.tab.active { color: #2563eb; border-bottom-color: #2563eb; }
+
+.panel { display: none; }
+.panel.active { display: block; }
+
+.card { background: white; padding: 20px; border-radius: 10px; margin-bottom: 16px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+.card h3 { margin-top: 0; font-size: 16px; }
+
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+.field { flex: 1; min-width: 140px; }
+.field label { display: block; font-size: 13px; color: #555; margin-bottom: 4px; }
+input, select, textarea { width: 100%; padding: 9px; font-size: 14px;
+                          border: 1px solid #d1d5db; border-radius: 6px;
+                          font-family: inherit; }
+button { padding: 9px 18px; background: #2563eb; color: white; border: none;
+         border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;
+         font-family: inherit; white-space: nowrap; }
+button:hover { background: #1d4ed8; }
+button.secondary { background: #6b7280; }
+button.danger { background: #dc2626; }
+button.success { background: #16a34a; }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+th { background: #f9fafb; font-weight: 600; color: #374151; font-size: 13px; }
+tr:hover td { background: #fafafa; }
+.action-btn { padding: 4px 10px; font-size: 12px; }
+
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px; margin-bottom: 20px; }
+.stat { background: white; padding: 16px; border-radius: 8px; text-align: center; }
+.stat .num { font-size: 26px; font-weight: 700; color: #2563eb; }
+.stat .label { font-size: 12px; color: #6b7280; margin-top: 4px; }
+.stat.warn { background: #fef2f2; border: 1px solid #fecaca; }
+.stat.warn .num { color: #dc2626; }
+.warn-tag { color: #dc2626; font-weight: 600; font-size: 12px; }
+.material-tag { color: #b45309; font-size: 12px; background: #fef3c7; padding: 2px 6px; border-radius: 4px; }
+.buy-tag { color: #166534; font-size: 12px; background: #dcfce7; padding: 2px 6px; border-radius: 4px; display: inline-block; }
+.buy-tag small { color: #15803d; }
+tr.incomplete-row td { background: #fffbeb; }
+tr.incomplete-row:hover td { background: #fef3c7; }
+
+.badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px;
+         background: #dbeafe; color: #1e40af; }
+.badge.green { background: #dcfce7; color: #166534; }
+.badge.gray { background: #f3f4f6; color: #6b7280; }
+
+.empty { text-align: center; padding: 40px; color: #999; }
+.photo-link { color: #2563eb; text-decoration: none; font-size: 12px; }
+.photo-link:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div id="login-screen" class="login-box">
+  <h2>外牆翻修打卡後台</h2>
+  <p style="color:#666">請使用授權的 Google 帳號登入</p>
+  <div id="g_id_onload"
+       data-client_id="166343824840-ea4pb0vebgv6ofnpjddof5dfva8ro2tl.apps.googleusercontent.com"
+       data-callback="handleCredentialResponse"
+       data-auto_prompt="false"></div>
+  <div class="g_id_signin"
+       data-type="standard"
+       data-size="large"
+       data-theme="outline"
+       data-text="sign_in_with"
+       data-shape="rectangular"
+       data-logo_alignment="left"></div>
+</div>
+
+<div id="main-screen" style="display:none">
+  <div class="header">
+    <h1>外牆翻修打卡 - 管理後台</h1>
+    <div class="user-info">
+      <span id="user-email"></span>
+      <button class="secondary" style="margin-left:10px" onclick="logout()">登出</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('report')">報表/工程進度</button>
+      <button class="tab" onclick="switchTab('employees')">員工管理</button>
+      <button class="tab" onclick="switchTab('sites')">案場管理</button>
+      <button class="tab" onclick="switchTab('procedures')">工序管理</button>
+    </div>
+
+    <!-- 報表 -->
+    <div class="panel active" id="panel-report">
+      <div class="card">
+        <h3>篩選條件</h3>
+        <div class="row">
+          <div class="field">
+            <label>月份</label>
+            <input type="month" id="filter-month">
+          </div>
+          <div class="field">
+            <label>案場</label>
+            <select id="filter-site"><option value="">全部</option></select>
+          </div>
+          <div class="field">
+            <label>員工</label>
+            <select id="filter-employee"><option value="">全部</option></select>
+          </div>
+          <div>
+            <button onclick="loadReport()">查詢</button>
+            <button class="secondary" onclick="downloadCSV()">下載 CSV</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="stat-row" id="stats"></div>
+
+      <div class="card">
+        <h3>💰 薪資彙總 (日薪制)</h3>
+        <table id="salary-table">
+          <thead><tr><th>姓名</th><th>出勤天數</th><th>日薪</th><th>應發薪資</th><th>勞報單</th><th>扣繳 (7%)</th><th>代買材料</th><th>實發合計</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>📅 每日工程進度</h3>
+        <table id="progress-table">
+          <thead><tr><th>日期</th><th>案場</th><th>工序</th><th>出工人員</th><th>照片數</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>📋 打卡明細</h3>
+        <div style="overflow-x:auto">
+          <table id="records-table">
+            <thead><tr>
+              <th>日期</th><th>姓名</th><th>案場</th><th>工序</th>
+              <th>上班</th><th>下班</th><th>工時</th><th>日薪</th>
+              <th>照片</th><th>材料需求</th><th>代買材料</th><th>備註</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 員工管理 -->
+    <div class="panel" id="panel-employees">
+      <div class="card">
+        <h3>新增員工</h3>
+        <div class="row">
+          <div class="field"><label>員工ID *</label><input id="new-emp-id" placeholder="如：W01、W02"></div>
+          <div class="field"><label>姓名 *</label><input id="new-emp-name" placeholder="王大明"></div>
+          <div class="field"><label>日薪 *</label><input type="number" id="new-emp-wage" placeholder="2500"></div>
+          <div class="field"><label>手機</label><input id="new-emp-phone" placeholder="09xxxxxxxx"></div>
+          <div class="field"><label>開立勞報單</label><select id="new-emp-receipt"><option value="是">是（正常發薪）</option><option value="否">否（扣 7%）</option></select></div>
+          <div><button class="success" onclick="addEmployee()">新增</button></div>
+        </div>
+        <div style="font-size:12px;color:#888;margin-top:8px">
+          💡 員工ID 是內部識別碼，建議用 W01、W02 這種短碼，新增後無法修改。
+        </div>
+      </div>
+      <div class="card">
+        <h3>現有員工</h3>
+        <table id="employees-table">
+          <thead><tr><th>員工ID</th><th>姓名</th><th>日薪</th><th>手機</th><th>勞報單</th><th>啟用</th><th>操作</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 案場管理 -->
+    <div class="panel" id="panel-sites">
+      <div class="card">
+        <h3>新增案場</h3>
+        <div class="row">
+          <div class="field"><label>案場名稱 *</label><input id="new-site-name" placeholder="如：仁義街外牆翻修"></div>
+          <div class="field"><label>地址</label><input id="new-site-address"></div>
+          <div class="field"><label>開始日期</label><input type="date" id="new-site-start"></div>
+          <div class="field"><label>預計結束</label><input type="date" id="new-site-end"></div>
+          <div><button class="success" onclick="addSite()">新增</button></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>現有案場</h3>
+        <table id="sites-table">
+          <thead><tr><th>案場名稱</th><th>地址</th><th>開始</th><th>結束</th><th>狀態</th><th>操作</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 工序管理 -->
+    <div class="panel" id="panel-procedures">
+      <div class="card">
+        <h3>新增工序</h3>
+        <div class="row">
+          <div class="field"><label>工序名稱 *</label><input id="new-proc-name" placeholder="如：搭鷹架、批土、防水、油漆"></div>
+          <div class="field"><label>排序</label><input type="number" id="new-proc-order" value="10"></div>
+          <div><button class="success" onclick="addProcedure()">新增</button></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>現有工序</h3>
+        <table id="procedures-table">
+          <thead><tr><th>排序</th><th>工序名稱</th><th>啟用</th><th>操作</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== 設定 =====
+const API_URL = 'https://script.google.com/macros/s/AKfycbySGybq9MaGuUi5SSoNPidkrutr98Iuj8Fu_KGSxM3Igsh2dvqMh2iUASD3Fkjerk-qyQ/exec';
+let currentUser = null;
+let currentData = null;
+
+// ===== Google 登入 =====
+function handleCredentialResponse(response) {
+  try {
+    // 正確解析 JWT：base64url → base64 → UTF-8（支援中文姓名）
+    const base64Url = response.credential.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - base64.length % 4) % 4);
+    const decoded = atob(padded);
+    const utf8 = decodeURIComponent(decoded.split('').map(c =>
+      '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+    ).join(''));
+    const payload = JSON.parse(utf8);
+
+    currentUser = { email: payload.email, name: payload.name };
+    document.getElementById('user-email').textContent = currentUser.email;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('main-screen').style.display = 'block';
+    loadAdminData();
+    // 預設本月
+    const now = new Date();
+    document.getElementById('filter-month').value =
+      `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    loadReport();
+  } catch (err) {
+    alert('登入解析失敗: ' + err.message);
+    console.error('JWT decode error', err);
+  }
+}
+
+function logout() {
+  currentUser = null;
+  location.reload();
+}
+
+// ===== 切換頁籤 =====
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('panel-' + name).classList.add('active');
+}
+
+// ===== 載入後台資料 =====
+async function loadAdminData() {
+  try {
+    const res = await fetch(API_URL + '?action=admin&email=' + encodeURIComponent(currentUser.email));
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+    currentData = data;
+
+    // 填入篩選下拉
+    const siteSel = document.getElementById('filter-site');
+    const empSel = document.getElementById('filter-employee');
+    siteSel.innerHTML = '<option value="">全部</option>';
+    empSel.innerHTML = '<option value="">全部</option>';
+    data.sites.forEach(s => {
+      siteSel.innerHTML += `<option value="${s['案場名稱']}">${s['案場名稱']}</option>`;
+    });
+    data.employees.filter(e => e['啟用'] === '是').forEach(e => {
+      empSel.innerHTML += `<option value="${e['姓名']}">${e['姓名']}</option>`;
+    });
+
+    renderEmployees();
+    renderSites();
+    renderProcedures();
+  } catch (err) {
+    alert('載入失敗: ' + err.message);
+  }
+}
+
+// ===== 員工管理 =====
+function renderEmployees() {
+  const tbody = document.querySelector('#employees-table tbody');
+  tbody.innerHTML = currentData.employees.map(e => `
+    <tr>
+      <td><code>${e['員工ID']}</code></td>
+      <td>${e['姓名']}</td>
+      <td>${Number(e['日薪']).toLocaleString()}</td>
+      <td>${e['手機'] || '-'}</td>
+      <td>${e['開立勞報單'] === '否'
+        ? '<span class="badge gray">否 (扣7%)</span>'
+        : '<span class="badge green">是</span>'}</td>
+      <td><span class="badge ${e['啟用']==='是'?'green':'gray'}">${e['啟用']}</span></td>
+      <td>
+        <button class="action-btn ${e['啟用']==='是'?'secondary':'success'}"
+                onclick="toggleEmployee('${e['員工ID']}', '${e['姓名']}', '${e['日薪']}', '${e['手機']||''}', '${e['開立勞報單']||'是'}', '${e['啟用']}')">
+          ${e['啟用']==='是'?'停用':'啟用'}
+        </button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="7" class="empty">尚無員工</td></tr>';
+}
+
+async function addEmployee() {
+  const id = document.getElementById('new-emp-id').value.trim();
+  const name = document.getElementById('new-emp-name').value.trim();
+  const wage = document.getElementById('new-emp-wage').value;
+  const phone = document.getElementById('new-emp-phone').value.trim();
+  const receipt = document.getElementById('new-emp-receipt').value;
+  if (!id) return alert('請輸入員工ID');
+  if (!name) return alert('請輸入姓名');
+  if (!wage) return alert('請輸入日薪');
+  const res = await postAction({
+    action: 'updateEmployees', mode: 'add',
+    email: currentUser.email,
+    id, name, dailyWage: wage, phone,
+    hasReceipt: receipt === '是'
+  });
+  if (res.ok) {
+    document.getElementById('new-emp-id').value = '';
+    document.getElementById('new-emp-name').value = '';
+    document.getElementById('new-emp-wage').value = '';
+    document.getElementById('new-emp-phone').value = '';
+    document.getElementById('new-emp-receipt').value = '是';
+    loadAdminData();
+  }
+}
+
+async function toggleEmployee(id, name, wage, phone, receipt, currentEnabled) {
+  const newEnabled = currentEnabled !== '是';
+  const action = newEnabled ? '啟用' : '停用';
+  if (!confirm(`確定要將「${name}」改為${action}？\n（停用後，工人打卡頁面下拉會看不到此人，但歷史記錄保留）`)) return;
+  const res = await postAction({
+    action: 'updateEmployees', mode: 'update',
+    email: currentUser.email,
+    id, name, dailyWage: wage, phone,
+    hasReceipt: receipt === '是',
+    enabled: newEnabled
+  });
+  if (res.ok) loadAdminData();
+}
+
+// ===== 案場管理 =====
+function renderSites() {
+  const tbody = document.querySelector('#sites-table tbody');
+  tbody.innerHTML = currentData.sites.map(s => `
+    <tr>
+      <td>${s['案場名稱']}</td>
+      <td>${s['地址'] || '-'}</td>
+      <td>${formatDate(s['開始日期'])}</td>
+      <td>${formatDate(s['結束日期'])}</td>
+      <td><span class="badge ${s['狀態']==='進行中'?'green':'gray'}">${s['狀態']}</span></td>
+      <td>
+        <button class="action-btn ${s['狀態']==='進行中'?'secondary':'success'}"
+                onclick="toggleSiteStatus('${s['案場ID']}', '${s['案場名稱']}', '${s['狀態']}')">
+          ${s['狀態']==='進行中'?'結案':'重啟'}
+        </button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="6" class="empty">尚無案場</td></tr>';
+}
+
+async function addSite() {
+  const name = document.getElementById('new-site-name').value.trim();
+  if (!name) return alert('請輸入案場名稱');
+  const res = await postAction({
+    action: 'updateSites', mode: 'add',
+    email: currentUser.email,
+    name,
+    address: document.getElementById('new-site-address').value,
+    startDate: document.getElementById('new-site-start').value,
+    endDate: document.getElementById('new-site-end').value,
+    status: '進行中'
+  });
+  if (res.ok) {
+    document.getElementById('new-site-name').value = '';
+    document.getElementById('new-site-address').value = '';
+    loadAdminData();
+  }
+}
+
+async function toggleSiteStatus(id, name, currentStatus) {
+  const newStatus = currentStatus === '進行中' ? '已結案' : '進行中';
+  if (!confirm(`確定要將「${name}」改為「${newStatus}」？`)) return;
+  const site = currentData.sites.find(s => s['案場ID'] === id);
+  const res = await postAction({
+    action: 'updateSites', mode: 'update',
+    email: currentUser.email,
+    id, name,
+    address: site['地址'],
+    startDate: site['開始日期'],
+    endDate: site['結束日期'],
+    status: newStatus
+  });
+  if (res.ok) loadAdminData();
+}
+
+// ===== 工序管理 =====
+function renderProcedures() {
+  const tbody = document.querySelector('#procedures-table tbody');
+  tbody.innerHTML = currentData.procedures.map(p => `
+    <tr>
+      <td>${p['排序']}</td>
+      <td>${p['工序名稱']}</td>
+      <td>${p['啟用']}</td>
+      <td>
+        <button class="action-btn ${p['啟用']==='是'?'secondary':'success'}"
+                onclick="toggleProcedure('${p['工序ID']}', '${p['工序名稱']}', '${p['排序']}', '${p['啟用']}')">
+          ${p['啟用']==='是'?'停用':'啟用'}
+        </button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="4" class="empty">尚無工序</td></tr>';
+}
+
+async function addProcedure() {
+  const name = document.getElementById('new-proc-name').value.trim();
+  if (!name) return alert('請輸入工序名稱');
+  const order = document.getElementById('new-proc-order').value || 99;
+  const res = await postAction({
+    action: 'updateProcedures', mode: 'add',
+    email: currentUser.email, name, order
+  });
+  if (res.ok) {
+    document.getElementById('new-proc-name').value = '';
+    loadAdminData();
+  }
+}
+
+async function toggleProcedure(id, name, order, enabled) {
+  const newEnabled = enabled !== '是';
+  const res = await postAction({
+    action: 'updateProcedures', mode: 'update',
+    email: currentUser.email, id, name, order, enabled: newEnabled
+  });
+  if (res.ok) loadAdminData();
+}
+
+// ===== 報表 =====
+async function loadReport() {
+  const params = new URLSearchParams({
+    action: 'report',
+    email: currentUser.email,
+    month: document.getElementById('filter-month').value,
+    site: document.getElementById('filter-site').value,
+    employee: document.getElementById('filter-employee').value
+  });
+  try {
+    const res = await fetch(API_URL + '?' + params.toString());
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+
+    // 統計
+    const totalDays = data.salary.reduce((s, x) => s + x.days, 0);
+    const totalNet = data.salary.reduce((s, x) => s + x.net, 0);
+    const incompleteCount = data.records.filter(r => r['上班時間'] && !r['下班時間']).length;
+    document.getElementById('stats').innerHTML = `
+      <div class="stat"><div class="num">${data.records.length}</div><div class="label">打卡筆數</div></div>
+      <div class="stat"><div class="num">${totalDays}</div><div class="label">總出工日</div></div>
+      <div class="stat"><div class="num">${totalNet.toLocaleString()}</div><div class="label">實發薪資合計 (元)</div></div>
+      <div class="stat ${incompleteCount > 0 ? 'warn' : ''}"><div class="num">${incompleteCount}</div><div class="label">⚠️ 未完成打卡</div></div>
+    `;
+
+    // 薪資
+    document.querySelector('#salary-table tbody').innerHTML = data.salary.map(s => `
+      <tr>
+        <td>${s.name}</td>
+        <td>${s.days}</td>
+        <td>${s.dailyWage.toLocaleString()}</td>
+        <td>${s.gross.toLocaleString()}</td>
+        <td>${s.hasReceipt ? '<span class="badge green">是</span>' : '<span class="badge gray">否</span>'}</td>
+        <td>${s.deduction > 0 ? '<span style="color:#dc2626">-' + s.deduction.toLocaleString() + '</span>' : '-'}</td>
+        <td>${s.buyTotal > 0 ? '<span style="color:#16a34a">+' + s.buyTotal.toLocaleString() + '</span>' : '-'}</td>
+        <td><strong>${s.net.toLocaleString()}</strong></td>
+      </tr>
+    `).join('') || '<tr><td colspan="8" class="empty">無資料</td></tr>';
+
+    // 進度
+    document.querySelector('#progress-table tbody').innerHTML = data.progress.map(p => `
+      <tr><td>${p.date}</td><td>${p.site}</td><td>${p.procedures}</td><td>${p.workers}</td><td>${p.photos}</td></tr>
+    `).join('') || '<tr><td colspan="5" class="empty">無資料</td></tr>';
+
+    // 明細
+    document.querySelector('#records-table tbody').innerHTML = data.records.map(r => {
+      const incomplete = r['上班時間'] && !r['下班時間'];
+      const outTimeCell = incomplete
+        ? '<span class="warn-tag">⚠️ 未打卡</span>'
+        : formatTime(r['下班時間']);
+      const materialCell = r['需補充材料'] === '是'
+        ? `<span class="material-tag">🔧 ${r['材料內容'] || '需補充'}</span>`
+        : '';
+      const buyCell = r['代買材料'] === '是'
+        ? `<span class="buy-tag">🛒 $${Number(r['代買金額']||0).toLocaleString()}<br><small>${r['代買品項']||''}${r['發票號碼'] ? ' / 發票:' + r['發票號碼'] : ''}</small></span>`
+        : '';
+      return `
+      <tr class="${incomplete ? 'incomplete-row' : ''}">
+        <td>${formatDate(r['日期'])}</td>
+        <td>${r['姓名']}</td>
+        <td>${r['案場']}</td>
+        <td>${r['工序']}</td>
+        <td>${formatTime(r['上班時間'])}</td>
+        <td>${outTimeCell}</td>
+        <td>${r['工時'] || '-'}</td>
+        <td>${r['日薪'] || '-'}</td>
+        <td>${photoLinks(r)}</td>
+        <td>${materialCell}</td>
+        <td>${buyCell}</td>
+        <td>${r['備註'] || ''}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="12" class="empty">無資料</td></tr>';
+
+    window._currentReport = data;
+  } catch (err) {
+    alert('查詢失敗: ' + err.message);
+  }
+}
+
+function photoLinks(r) {
+  const links = [];
+  if (r['上班自拍']) links.push(`<a class="photo-link" href="${r['上班自拍']}" target="_blank">上班</a>`);
+  if (r['下班自拍']) links.push(`<a class="photo-link" href="${r['下班自拍']}" target="_blank">下班</a>`);
+  if (r['工程照片']) {
+    const urls = String(r['工程照片']).split('\n').filter(x => x);
+    urls.forEach((u, i) => links.push(`<a class="photo-link" href="${u}" target="_blank">工程${i+1}</a>`));
+  }
+  return links.join(' ');
+}
+
+function downloadCSV() {
+  const data = window._currentReport;
+  if (!data || !data.records.length) return alert('無資料可下載');
+  const headers = ['日期','姓名','案場','工序','上班時間','下班時間','工時','日薪','需補充材料','材料內容','代買材料','代買金額','發票號碼','代買品項','備註'];
+  const rows = data.records.map(r => {
+    const incomplete = r['上班時間'] && !r['下班時間'];
+    return [
+      formatDate(r['日期']), r['姓名'], r['案場'], r['工序'],
+      formatTime(r['上班時間']),
+      incomplete ? '未打卡' : formatTime(r['下班時間']),
+      r['工時']||'', r['日薪']||'',
+      r['需補充材料']||'', r['材料內容']||'',
+      r['代買材料']||'', r['代買金額']||'', r['發票號碼']||'', r['代買品項']||'',
+      r['備註']||''
+    ];
+  });
+  const csv = '\uFEFF' + [headers, ...rows].map(row =>
+    row.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')
+  ).join('\n');
+  const month = document.getElementById('filter-month').value || 'all';
+  const site = document.getElementById('filter-site').value || 'all-sites';
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `打卡記錄_${month}_${site}.csv`;
+  a.click();
+}
+
+async function postAction(payload) {
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!data.ok) { alert('失敗: ' + data.error); return data; }
+    return data;
+  } catch (err) {
+    alert('錯誤: ' + err.message);
+    return { ok: false };
+  }
+}
+
+function formatDate(d) {
+  if (!d) return '-';
+  if (d instanceof Date) d = d.toISOString();
+  return String(d).substring(0, 10);
+}
+function formatTime(t) {
+  if (!t) return '-';
+  return String(t).substring(0, 8);
+}
+</script>
+</body>
+</html>
