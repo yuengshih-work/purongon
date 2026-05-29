@@ -21,6 +21,18 @@ body {
 .header .clock { font-size: 36px; font-weight: 300; margin-top: 8px; letter-spacing: 2px; }
 .header .date { font-size: 14px; opacity: 0.8; margin-top: 4px; }
 
+.marquee-bar { display: flex; align-items: center; background: #fef3c7; border: 1px solid #fcd34d;
+               border-radius: 10px; margin-bottom: 16px; padding: 8px 0; overflow: hidden; }
+.marquee-icon { flex-shrink: 0; padding: 0 12px; font-size: 18px; }
+.marquee-track { flex: 1; white-space: nowrap; overflow: hidden; position: relative; }
+.marquee-content { display: inline-block; padding-left: 100%; animation: marquee 30s linear infinite;
+                   color: #78350f; font-size: 14px; font-weight: 500; }
+.marquee-content span { display: inline-block; margin-right: 60px; }
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}
+
 .card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
 .field { margin-bottom: 16px; }
 .field label { display: block; font-size: 14px; color: #555; margin-bottom: 6px; font-weight: 500; }
@@ -90,6 +102,17 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .procedure-item:hover { background: #f0f0f0; }
 .procedure-item input { width: 18px; height: 18px; cursor: pointer; }
 .procedure-item.checked { background: #fef3c7; }
+.invoice-row { background: #fafafa; border: 1px solid #e5e7eb; border-radius: 8px;
+               padding: 12px; margin-bottom: 8px; position: relative; }
+.invoice-row .row-num { font-size: 12px; color: #6b7280; margin-bottom: 8px; font-weight: 600; }
+.invoice-row input, .invoice-row textarea { margin-bottom: 6px; }
+.invoice-row .del-btn { position: absolute; top: 8px; right: 8px; background: #fee2e2;
+                       color: #991b1b; border: none; padding: 4px 10px; border-radius: 6px;
+                       font-size: 12px; cursor: pointer; }
+.add-invoice-btn { width: 100%; padding: 10px; background: #f3f4f6; color: #2563eb;
+                   border: 1px dashed #93c5fd; border-radius: 8px; cursor: pointer;
+                   font-family: inherit; font-size: 14px; font-weight: 500; }
+.add-invoice-btn:hover { background: #e5edff; }
 </style>
 </head>
 <body>
@@ -98,6 +121,11 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
     <h1>平安住工程打卡</h1>
     <div class="clock" id="clock">--:--:--</div>
     <div class="date" id="date">--</div>
+  </div>
+
+  <div id="marquee-bar" class="marquee-bar" style="display:none">
+    <span class="marquee-icon">📢</span>
+    <div class="marquee-track" id="marquee-track"></div>
   </div>
 
   <div class="card">
@@ -155,12 +183,11 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
     <div class="field">
       <label class="material-check">
         <input type="checkbox" id="buy-material" onchange="toggleBuyBox()">
-        <span>🛒 代買材料（墊款，會列入薪資結算）</span>
+        <span>🛒 代買材料（墊款項目，獨立追蹤付款）</span>
       </label>
       <div id="buy-box" style="display:none;margin-top:8px">
-        <input type="number" id="buy-amount" placeholder="代買金額（元）" style="margin-bottom:8px">
-        <input type="text" id="buy-invoice" placeholder="發票號碼" style="margin-bottom:8px">
-        <textarea id="buy-items" placeholder="代買品項（例如：水泥 2 包、矽利康 5 條）"></textarea>
+        <div id="invoice-list"></div>
+        <button type="button" class="add-invoice-btn" onclick="addInvoiceRow()">+ 再加一張發票</button>
       </div>
     </div>
 
@@ -229,6 +256,13 @@ if (navigator.geolocation) {
   );
 }
 
+// ===== HTML 跳脫（跑馬燈用）=====
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // ===== 載入設定 =====
 async function loadConfig() {
   try {
@@ -261,6 +295,15 @@ async function loadConfig() {
         `<span>${p.name}</span>`;
       procList.appendChild(label);
     });
+
+    // 跑馬燈：所有啟用公告串成一串，CSS 動畫不間斷捲動
+    const announcements = data.announcements || [];
+    if (announcements.length > 0) {
+      const track = document.getElementById('marquee-track');
+      const contentHtml = announcements.map(a => `<span>${escapeHtml(a)}</span>`).join('');
+      track.innerHTML = `<div class="marquee-content">${contentHtml}</div>`;
+      document.getElementById('marquee-bar').style.display = 'flex';
+    }
 
     // 員工或案場變更時，自動檢查今日打卡狀態
     document.getElementById('employee').addEventListener('change', checkClockStatus);
@@ -385,10 +428,56 @@ function toggleMaterialBox() {
   document.getElementById('material-note').style.display = checked ? 'block' : 'none';
 }
 
-// ===== 代買材料勾選框 =====
+// ===== 代買材料勾選框 + 多張發票管理 =====
 function toggleBuyBox() {
   const checked = document.getElementById('buy-material').checked;
   document.getElementById('buy-box').style.display = checked ? 'block' : 'none';
+  // 勾選時自動加一張空白發票
+  if (checked && document.querySelectorAll('.invoice-row').length === 0) {
+    addInvoiceRow();
+  }
+}
+
+function addInvoiceRow() {
+  const list = document.getElementById('invoice-list');
+  const idx = list.children.length + 1;
+  const row = document.createElement('div');
+  row.className = 'invoice-row';
+  row.innerHTML = `
+    <div class="row-num">📄 第 ${idx} 張發票</div>
+    ${idx > 1 ? '<button type="button" class="del-btn" onclick="removeInvoiceRow(this)">移除</button>' : ''}
+    <input type="number" class="buy-amount" placeholder="代買金額（元）">
+    <input type="text" class="buy-invoice" placeholder="發票號碼">
+    <textarea class="buy-items" placeholder="代買品項（例如：水泥 2 包、矽利康 5 條）"></textarea>
+  `;
+  list.appendChild(row);
+}
+
+function removeInvoiceRow(btn) {
+  btn.parentElement.remove();
+  // 重新編號
+  document.querySelectorAll('.invoice-row').forEach((row, i) => {
+    row.querySelector('.row-num').textContent = `📄 第 ${i + 1} 張發票`;
+    // 第一張不應有移除鈕
+    const delBtn = row.querySelector('.del-btn');
+    if (i === 0 && delBtn) delBtn.remove();
+    if (i > 0 && !delBtn) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'del-btn';
+      b.textContent = '移除';
+      b.onclick = function() { removeInvoiceRow(b); };
+      row.insertBefore(b, row.firstChild.nextSibling);
+    }
+  });
+}
+
+function collectInvoices() {
+  return Array.from(document.querySelectorAll('.invoice-row')).map(row => ({
+    amount: row.querySelector('.buy-amount').value,
+    invoice: row.querySelector('.buy-invoice').value.trim(),
+    items: row.querySelector('.buy-items').value.trim()
+  })).filter(r => r.amount || r.invoice || r.items);  // 完全空白的不算
 }
 
 // ===== 特殊情形勾選框 =====
@@ -438,12 +527,24 @@ async function submit(action) {
   }
 
   const buyMaterial = document.getElementById('buy-material').checked;
-  const buyAmount = document.getElementById('buy-amount').value;
-  const buyInvoice = document.getElementById('buy-invoice').value.trim();
-  const buyItems = document.getElementById('buy-items').value.trim();
+  let buyAmount = '', buyInvoice = '', buyItems = '';
   if (buyMaterial) {
-    if (!buyAmount || Number(buyAmount) <= 0) return showToast('請填寫代買金額', 'error');
-    if (!buyItems) return showToast('請填寫代買品項', 'error');
+    const invoices = collectInvoices();
+    if (invoices.length === 0) return showToast('請至少填一張發票', 'error');
+    // 每張發票必須有金額和品項
+    for (let i = 0; i < invoices.length; i++) {
+      const inv = invoices[i];
+      if (!inv.amount || Number(inv.amount) <= 0) {
+        return showToast(`第 ${i + 1} 張發票請填金額`, 'error');
+      }
+      if (!inv.items) {
+        return showToast(`第 ${i + 1} 張發票請填品項`, 'error');
+      }
+    }
+    // 組合：金額加總、發票與品項用「 | 」連接，品項後面附金額
+    buyAmount = invoices.reduce((s, x) => s + Number(x.amount), 0);
+    buyInvoice = invoices.map(x => x.invoice || '(無發票)').join(' | ');
+    buyItems = invoices.map(x => `${x.items} ($${Number(x.amount).toLocaleString()})`).join(' | ');
   }
 
   const specialSituation = document.getElementById('special-situation').checked;
@@ -499,9 +600,7 @@ async function submit(action) {
     document.getElementById('material-note').value = '';
     document.getElementById('material-note').style.display = 'none';
     document.getElementById('buy-material').checked = false;
-    document.getElementById('buy-amount').value = '';
-    document.getElementById('buy-invoice').value = '';
-    document.getElementById('buy-items').value = '';
+    document.getElementById('invoice-list').innerHTML = '';
     document.getElementById('buy-box').style.display = 'none';
     // 重置特殊情形
     specialPhotosData = [];
