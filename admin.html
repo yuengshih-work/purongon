@@ -101,7 +101,7 @@ tr.incomplete-row:hover td { background: #fef3c7; }
 <body>
 
 <div id="login-screen" class="login-box">
-  <h2>工地打卡後台</h2>
+  <h2>平安住工程打卡後台</h2>
   <p style="color:#666">請使用授權的 Google 帳號登入</p>
   <div id="g-signin-btn" style="display:flex;justify-content:center;margin-top:20px"></div>
   <p id="g-signin-status" style="color:#999;font-size:13px;margin-top:12px">登入元件載入中...</p>
@@ -109,7 +109,7 @@ tr.incomplete-row:hover td { background: #fef3c7; }
 
 <div id="main-screen" style="display:none">
   <div class="header">
-    <h1>工地打卡 - 管理後台</h1>
+    <h1>平安住工程打卡 - 管理後台</h1>
     <div class="user-info">
       <span id="user-email"></span>
       <button class="secondary" style="margin-left:10px" onclick="logout()">登出</button>
@@ -122,6 +122,7 @@ tr.incomplete-row:hover td { background: #fef3c7; }
       <button class="tab" onclick="switchTab('employees')">員工管理</button>
       <button class="tab" onclick="switchTab('sites')">案場管理</button>
       <button class="tab" onclick="switchTab('procedures')">工序管理</button>
+      <button class="tab" onclick="switchTab('announcements')">公告管理</button>
     </div>
 
     <!-- 報表 -->
@@ -165,7 +166,7 @@ tr.incomplete-row:hover td { background: #fef3c7; }
       <div class="card">
         <h3>💰 薪資彙總 (日薪制)</h3>
         <table id="salary-table">
-          <thead><tr><th>姓名</th><th>出勤天數</th><th>日薪</th><th>應發薪資</th><th>勞報單</th><th>扣繳 (7%)</th><th>代買材料</th><th>實發合計</th><th>發放狀態</th><th>操作</th></tr></thead>
+          <thead><tr><th>姓名</th><th>出勤天數</th><th>日薪</th><th>應發薪資</th><th>勞報單</th><th>扣繳 (7%)</th><th>實發合計</th><th>發放狀態</th><th>操作</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -176,6 +177,19 @@ tr.incomplete-row:hover td { background: #fef3c7; }
           <thead><tr><th>日期</th><th>案場</th><th>工序</th><th>出工人員</th><th>照片數</th></tr></thead>
           <tbody></tbody>
         </table>
+      </div>
+
+      <div class="card">
+        <h3>🛒 代墊款項彙總</h3>
+        <div style="overflow-x:auto">
+          <table id="buylist-table">
+            <thead><tr>
+              <th>日期</th><th>姓名</th><th>案場</th><th>金額</th>
+              <th>發票號碼</th><th>品項</th><th>狀態</th><th>付款日期/說明</th><th>操作</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
 
       <div class="card">
@@ -257,6 +271,30 @@ tr.incomplete-row:hover td { background: #fef3c7; }
         </table>
       </div>
     </div>
+
+    <!-- 公告管理 -->
+    <div class="panel" id="panel-announcements">
+      <div class="card">
+        <h3>新增公告</h3>
+        <div class="row">
+          <div class="field" style="flex:3">
+            <label>公告內容 *</label>
+            <input id="new-ann-content" placeholder="例如：5/30 全員到民權DC支援、本週六加班至 17:00...">
+          </div>
+          <div><button class="success" onclick="addAnnouncement()">新增</button></div>
+        </div>
+        <div style="font-size:12px;color:#888;margin-top:8px">
+          💡 公告會在工人打卡頁面頂端以跑馬燈方式顯示。多條公告串成一串連續捲動。
+        </div>
+      </div>
+      <div class="card">
+        <h3>現有公告</h3>
+        <table id="announcements-table">
+          <thead><tr><th>建立日期</th><th>內容</th><th>啟用</th><th>操作</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -298,6 +336,26 @@ tr.incomplete-row:hover td { background: #fef3c7; }
     <div class="modal-actions">
       <button class="secondary" onclick="closePayModal()">取消</button>
       <button class="success" onclick="submitPay()">確認發放</button>
+    </div>
+  </div>
+</div>
+
+<!-- 標記代墊已付 Modal -->
+<div id="buy-pay-modal" class="modal-overlay">
+  <div class="modal-box">
+    <h3>標記代墊已付款</h3>
+    <div id="buy-pay-info" class="fix-info"></div>
+    <div class="field">
+      <label>付款日期 *</label>
+      <input type="date" id="buy-pay-date">
+    </div>
+    <div class="field">
+      <label>付款描述（選填）</label>
+      <textarea id="buy-pay-desc" placeholder="例如：現金、5/30 一併匯款、轉帳備註..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeBuyPayModal()">取消</button>
+      <button class="success" onclick="submitBuyPay()">確認已付</button>
     </div>
   </div>
 </div>
@@ -371,6 +429,7 @@ async function loadAdminData() {
     renderEmployees();
     renderSites();
     renderProcedures();
+    renderAnnouncements();
   } catch (err) {
     alert('載入失敗: ' + err.message);
   }
@@ -663,12 +722,16 @@ async function loadReport() {
     const totalDays = data.salary.reduce((s, x) => s + x.days, 0);
     const totalNet = data.salary.reduce((s, x) => s + x.net, 0);
     const totalUnpaid = data.salary.reduce((s, x) => s + x.unpaidNet, 0);
+    const buyList = data.buyList || [];
+    const totalBuy = buyList.reduce((s, x) => s + x.amount, 0);
+    const unpaidBuy = buyList.filter(x => !x.paid).reduce((s, x) => s + x.amount, 0);
     const incompleteCount = data.records.filter(r => r['上班時間'] && !r['下班時間']).length;
     document.getElementById('stats').innerHTML = `
       <div class="stat"><div class="num">${data.records.length}</div><div class="label">打卡筆數</div></div>
       <div class="stat"><div class="num">${totalDays}</div><div class="label">總出工日</div></div>
       <div class="stat"><div class="num">${totalNet.toLocaleString()}</div><div class="label">實發薪資合計 (元)</div></div>
-      <div class="stat ${totalUnpaid > 0 ? 'warn' : ''}"><div class="num">${totalUnpaid.toLocaleString()}</div><div class="label">💸 未發放金額 (元)</div></div>
+      <div class="stat ${totalUnpaid > 0 ? 'warn' : ''}"><div class="num">${totalUnpaid.toLocaleString()}</div><div class="label">💸 未發放薪資 (元)</div></div>
+      <div class="stat ${unpaidBuy > 0 ? 'warn' : ''}"><div class="num">${unpaidBuy.toLocaleString()}</div><div class="label">🛒 未付代墊 (元)</div></div>
       <div class="stat ${incompleteCount > 0 ? 'warn' : ''}"><div class="num">${incompleteCount}</div><div class="label">⚠️ 未完成打卡</div></div>
     `;
 
@@ -695,17 +758,41 @@ async function loadReport() {
         <td>${s.gross.toLocaleString()}</td>
         <td>${s.hasReceipt ? '<span class="badge green">是</span>' : '<span class="badge gray">否</span>'}</td>
         <td>${s.deduction > 0 ? '<span style="color:#dc2626">-' + s.deduction.toLocaleString() + '</span>' : '-'}</td>
-        <td>${s.buyTotal > 0 ? '<span style="color:#16a34a">+' + s.buyTotal.toLocaleString() + '</span>' : '-'}</td>
         <td><strong>${s.net.toLocaleString()}</strong></td>
         <td>${statusBadge}</td>
         <td>${actionBtn}</td>
       </tr>`;
-    }).join('') || '<tr><td colspan="10" class="empty">無資料</td></tr>';
+    }).join('') || '<tr><td colspan="9" class="empty">無資料</td></tr>';
 
     // 進度
     document.querySelector('#progress-table tbody').innerHTML = data.progress.map(p => `
       <tr><td>${p.date}</td><td>${p.site}</td><td>${p.procedures}</td><td>${p.workers}</td><td>${p.photos}</td></tr>
     `).join('') || '<tr><td colspan="5" class="empty">無資料</td></tr>';
+
+    // 代墊款項彙總
+    document.querySelector('#buylist-table tbody').innerHTML = buyList.map(b => {
+      const statusBadge = b.paid
+        ? `<span class="pay-status-badge paid">✓ 已付</span>`
+        : `<span class="pay-status-badge unpaid">未付</span>`;
+      const payInfo = b.paid
+        ? `${b.payDate || '-'}${b.payDesc ? '<br><small style="color:#666">' + escapeHtml(b.payDesc) + '</small>' : ''}`
+        : '-';
+      const actionBtn = b.paid
+        ? `<button class="action-btn secondary" onclick="unmarkBuyPaid('${b.recordId}', '${escapeHtml(b.name)}')">取消已付</button>`
+        : `<button class="action-btn success" onclick="openBuyPayModal('${b.recordId}', '${escapeHtml(b.name)}', '${b.date}', ${b.amount})">標記已付</button>`;
+      return `
+      <tr>
+        <td>${b.date}</td>
+        <td>${escapeHtml(b.name)}</td>
+        <td>${escapeHtml(b.site)}</td>
+        <td><strong>$${b.amount.toLocaleString()}</strong></td>
+        <td>${escapeHtml(b.invoice)}</td>
+        <td>${escapeHtml(b.items)}</td>
+        <td>${statusBadge}</td>
+        <td>${payInfo}</td>
+        <td>${actionBtn}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="9" class="empty">查詢期間無代墊款項</td></tr>';
 
     // 明細
     document.querySelector('#records-table tbody').innerHTML = data.records.map(r => {
@@ -747,6 +834,124 @@ async function loadReport() {
   } catch (err) {
     alert('查詢失敗: ' + err.message);
   }
+}
+
+// ===== HTML 跳脫 =====
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ===== 代墊已付 Modal =====
+let payingBuyRecordId = null;
+let payingBuyEmployee = null;
+
+function openBuyPayModal(recordId, name, date, amount) {
+  payingBuyRecordId = recordId;
+  payingBuyEmployee = name;
+  document.getElementById('buy-pay-info').innerHTML =
+    `員工：<strong>${escapeHtml(name)}</strong><br>` +
+    `打卡日期：${date}<br>` +
+    `代墊金額：<strong style="color:#dc2626">$${amount.toLocaleString()}</strong>`;
+  // 預設付款日期為今天
+  const today = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  document.getElementById('buy-pay-date').value =
+    `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+  document.getElementById('buy-pay-desc').value = '';
+  document.getElementById('buy-pay-modal').classList.add('show');
+}
+
+function closeBuyPayModal() {
+  payingBuyRecordId = null;
+  payingBuyEmployee = null;
+  document.getElementById('buy-pay-modal').classList.remove('show');
+}
+
+async function submitBuyPay() {
+  const payDate = document.getElementById('buy-pay-date').value;
+  const payDesc = document.getElementById('buy-pay-desc').value.trim();
+  if (!payDate) return alert('請選擇付款日期');
+  const res = await postAction({
+    action: 'markBuyMaterialPaid',
+    email: currentUser.email,
+    recordId: payingBuyRecordId,
+    payDate: payDate,
+    payDesc: payDesc
+  });
+  if (res.ok) {
+    closeBuyPayModal();
+    loadReport();
+  }
+}
+
+async function unmarkBuyPaid(recordId, name) {
+  if (!confirm(`確定要取消「${name}」這筆代墊的已付標記？`)) return;
+  const res = await postAction({
+    action: 'markBuyMaterialPaid',
+    mode: 'unpay',
+    email: currentUser.email,
+    recordId: recordId
+  });
+  if (res.ok) loadReport();
+}
+
+// ===== 公告管理 =====
+function renderAnnouncements() {
+  const tbody = document.querySelector('#announcements-table tbody');
+  const announcements = currentData.announcements || [];
+  tbody.innerHTML = announcements.map(a => `
+    <tr>
+      <td>${formatDate(a['建立日期'])}</td>
+      <td>${escapeHtml(a['內容'])}</td>
+      <td><span class="badge ${a['啟用']==='是'?'green':'gray'}">${a['啟用']}</span></td>
+      <td>
+        <button class="action-btn ${a['啟用']==='是'?'secondary':'success'}"
+                onclick="toggleAnnouncement('${a['公告ID']}', ${JSON.stringify(a['內容'])}, '${a['啟用']}')">
+          ${a['啟用']==='是'?'停用':'啟用'}
+        </button>
+        <button class="action-btn danger"
+                onclick="deleteAnnouncement('${a['公告ID']}', ${JSON.stringify(a['內容'])})">
+          刪除
+        </button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="4" class="empty">尚無公告</td></tr>';
+}
+
+async function addAnnouncement() {
+  const content = document.getElementById('new-ann-content').value.trim();
+  if (!content) return alert('請輸入公告內容');
+  const res = await postAction({
+    action: 'updateAnnouncements', mode: 'add',
+    email: currentUser.email,
+    content
+  });
+  if (res.ok) {
+    document.getElementById('new-ann-content').value = '';
+    loadAdminData();
+  }
+}
+
+async function toggleAnnouncement(id, content, enabled) {
+  const newEnabled = enabled !== '是';
+  const res = await postAction({
+    action: 'updateAnnouncements', mode: 'update',
+    email: currentUser.email,
+    id, content, enabled: newEnabled
+  });
+  if (res.ok) loadAdminData();
+}
+
+async function deleteAnnouncement(id, content) {
+  if (!confirm(`確定刪除公告「${content}」？\n刪除後無法還原。`)) return;
+  const res = await postAction({
+    action: 'updateAnnouncements', mode: 'delete',
+    email: currentUser.email,
+    id
+  });
+  if (res.ok) loadAdminData();
 }
 
 function photoLinks(r) {
